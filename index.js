@@ -195,6 +195,28 @@ io.on("connection", (socket) => {
     }
   });
 
+  socket.on("success_game", ({ name, room }) => {
+    try {
+      const leavename = sockets[room].names.filter((item) => item['id'] === name)
+      sockets[room].names = sockets[room].names.filter((item) => item['id'] !== name)
+      if (sockets[room].names.length <= 1) {
+        io.in(room).emit("end_game", `There is no othe player, so that the game has ended.`);
+        delete sockets[room];
+      } else {
+        const players = sockets[room].names.filter((item) => item.nickname.length > 0);
+        io.in(room).emit("game_players", players);
+        sockets[room].debts = sockets[room].debts.filter((item) => item['id'] !== name)
+        sockets[room].currentMembers = io.sockets.adapter.rooms.get(room).size;
+        io.in(room).emit("player_names", sockets[room].names);
+        io.in(room).emit("player_debts", sockets[room].debts);
+      }
+      io.in(room).emit("update", `${leavename[0].nickname} has forgived 495 debts`);
+      io.in(room).emit("leave_game", `${nickname} has leaved this game`);
+    } catch (error) {
+      console.log(error.message);
+    }
+  });
+
   socket.on("end_game", ({ room }) => {
     try {
       console.log("game ended");
