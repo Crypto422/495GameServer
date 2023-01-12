@@ -104,6 +104,7 @@ io.on("connection", (socket) => {
         const leavename = sockets[room].names.filter((item) => item['id'] === name)
         sockets[room].names = sockets[room].names.filter((item) => item['id'] !== name)
         sockets[room].debts = sockets[room].debts.filter((item) => item['id'] !== name)
+        const players = sockets[room].names.filter((item) => item.nickname.length > 0);
         try {
           sockets[room].currentMembers = io.sockets.adapter.rooms.get(room).size;
         } catch (error) {
@@ -115,6 +116,7 @@ io.on("connection", (socket) => {
         }
         io.in(room).emit("player_names", sockets[room].names);
         io.in(room).emit("player_debts", sockets[room].debts);
+        io.in(room).emit("game_players", players);
         console.log(`${name} has left ${room}`);
         if (sockets[room].owner === socket.id) {
           delete sockets[room];
@@ -131,7 +133,7 @@ io.on("connection", (socket) => {
   socket.on("kick_player", ({ name, room }) => {
     try {
       if (sockets[room]) {
-        io.in(room).emit("kick_player", name);
+        io.in(room).emit("kick_player", name, room);
         console.log(`${name} has kicked ${room}`);
       }
     } catch (error) {
@@ -189,20 +191,18 @@ io.on("connection", (socket) => {
     }
   });
 
-  socket.on("forgive", ({ ids, room, amounts, debts }) => {
+  socket.on("forgive_self", ({ id, room, amount, debt }) => {
     try {
       const players = sockets[room].names.filter((item) => item.nickname.length > 0);
-      ids.forEach((id, index) => {
-        const newdebts = sockets[room].debts.map((item) => {
-          if (item.id === id) {
-            return { 'id': id, 'debt': debts[index] }
-          } else {
-            return item
-          }
-        })
-        sockets[room].debts = [...newdebts]
+      const newdebts = sockets[room].debts.map((item) => {
+        if (item.id === id) {
+          return { 'id': id, 'debt': debt }
+        } else {
+          return item
+        }
       })
-      io.in(room).emit("forgive", ids, amounts, players);
+      sockets[room].debts = [...newdebts]
+      io.in(room).emit("forgive_self", id, amount, players);
       io.in(room).emit("player_debts", sockets[room].debts);
       console.log("send forgive info")
     } catch (error) {
@@ -210,7 +210,7 @@ io.on("connection", (socket) => {
     }
   });
 
-  socket.on("transgress", ({ from, ids, room, amounts, debts }) => {
+  socket.on("forgive", ({ from, ids, room, amount, debts }) => {
     try {
       const players = sockets[room].names.filter((item) => item.nickname.length > 0);
       ids.forEach((id, index) => {
@@ -223,7 +223,28 @@ io.on("connection", (socket) => {
         })
         sockets[room].debts = [...newdebts]
       })
-      io.in(room).emit("transgress", from, ids, amounts, players);
+      io.in(room).emit("forgive", from, ids, amount, players);
+      io.in(room).emit("player_debts", sockets[room].debts);
+      console.log("send forgive info")
+    } catch (error) {
+      console.log(error.message);
+    }
+  });
+
+  socket.on("transgress", ({ from, ids, room, amount, debts }) => {
+    try {
+      const players = sockets[room].names.filter((item) => item.nickname.length > 0);
+      ids.forEach((id, index) => {
+        const newdebts = sockets[room].debts.map((item) => {
+          if (item.id === id) {
+            return { 'id': id, 'debt': debts[index] }
+          } else {
+            return item
+          }
+        })
+        sockets[room].debts = [...newdebts]
+      })
+      io.in(room).emit("transgress", from, ids, amount, players);
       io.in(room).emit("player_debts", sockets[room].debts);
     } catch (error) {
       console.log(error.message);
@@ -233,7 +254,7 @@ io.on("connection", (socket) => {
   socket.on("start_game", ({ room }) => {
     try {
       const players = sockets[room].names.filter((item) => item.nickname.length > 0);
-      io.in(room).emit("start_game", players);
+      io.in(room).emit("start_game", players, room);
       io.in(room).emit("game_players", players);
       io.in(room).emit("player_debts", sockets[room].debts);
 
@@ -262,47 +283,11 @@ io.on("connection", (socket) => {
     }
   });
 
-  socket.on("leave_game", ({ name, room }) => {
+  socket.on("join_game_first", ({ room }) => {
     try {
-      const leavename = sockets[room].names.filter((item) => item['id'] === name)
-      sockets[room].names = sockets[room].names.filter((item) => item['id'] !== name)
-      if (sockets[room].names.length <= 1) {
-        io.in(room).emit("end_game", `There is no other player, so that the game has ended.`);
-      } else if (sockets[room].owner === name) {
-        io.in(room).emit("end_game", `The Admin has closed this game.`);
-      }
-
       const players = sockets[room].names.filter((item) => item.nickname.length > 0);
       io.in(room).emit("game_players", players);
-      sockets[room].debts = sockets[room].debts.filter((item) => item['id'] !== name)
-      sockets[room].currentMembers = io.sockets.adapter.rooms.get(room).size;
-      io.in(room).emit("player_names", sockets[room].names);
       io.in(room).emit("player_debts", sockets[room].debts);
-
-      io.in(room).emit("update", `${leavename[0].nickname} has left game`);
-      io.in(room).emit("leave_game", `${nickname} has leaved this game`);
-    } catch (error) {
-      console.log(error.message);
-    }
-  });
-
-  socket.on("success_game", ({ name, room }) => {
-    try {
-      const leavename = sockets[room].names.filter((item) => item['id'] === name)
-      sockets[room].names = sockets[room].names.filter((item) => item['id'] !== name)
-      if (sockets[room].names.length <= 1) {
-        io.in(room).emit("end_game", `There is no othe player, so that the game has ended.`);
-        delete sockets[room];
-      } else {
-        const players = sockets[room].names.filter((item) => item.nickname.length > 0);
-        io.in(room).emit("game_players", players);
-        sockets[room].debts = sockets[room].debts.filter((item) => item['id'] !== name)
-        sockets[room].currentMembers = io.sockets.adapter.rooms.get(room).size;
-        io.in(room).emit("player_names", sockets[room].names);
-        io.in(room).emit("player_debts", sockets[room].debts);
-      }
-      io.in(room).emit("update", `${leavename[0].nickname} has forgived 495 debts`);
-      io.in(room).emit("leave_game", `${nickname} has leaved this game`);
     } catch (error) {
       console.log(error.message);
     }
@@ -310,17 +295,52 @@ io.on("connection", (socket) => {
 
   socket.on("end_game", ({ room }) => {
     try {
-      console.log("game ended");
-      io.in(room).emit("end_game", `There is no othe player, so that the game has ended.`);
-      delete sockets[room];
+      const names = sockets[room].names.map((item) => {
+        return { 'id': item.id, 'nickname': "" }
+      })
+      sockets[room].names = [...names]
+      sockets[room].start = false;
+      sockets[room]._turn = 0;
+      const debts = sockets[room].names.map((item) => {
+        return { 'id': item.id, 'debts': 495 }
+      })
+      sockets[room].debts = [...debts]
+
+      const players = sockets[room].names.filter((item) => item.nickname.length > 0);
+      sockets[room].currentMembers = io.sockets.adapter.rooms.get(room).size;
+
+      io.in(room).emit("end_game", room);
+      io.in(room).emit("room_state", false);
+      io.in(room).emit("game_players", players);
+      io.in(room).emit("player_names", sockets[room].names);
+      io.in(room).emit("player_debts", sockets[room].debts);
+
     } catch (error) {
       console.log(error.message);
     }
   });
 
-  socket.on("turn_over", ({ room }) => {
+  socket.on("success_game", ({ name, room }) => {
     try {
-      const players = sockets[room].names.filter((item) => item.nickname.length > 0);
+      const leavename = sockets[socket.room].names.filter((item) => item['id'] === name)
+      const names = sockets[room].names.map((item) => {
+        if (item.id === name) {
+          return { 'id': name, 'nickname': "" }
+        } else {
+          return item
+        }
+      })
+      sockets[room].names = [...names]
+      let players = sockets[room].names.filter((item) => item.nickname.length > 0);
+      io.in(room).emit("game_players", players);
+      io.in(room).emit("success_game",name, leavename[0].nickname);
+    } catch (error) {
+      console.log(error.message);
+    }
+  });
+
+  socket.on("turn_over", ({ room, players }) => {
+    try {
       sockets[room]._turn =
         (sockets[room]._turn + 1) % players.length;
 
@@ -341,17 +361,21 @@ io.on("connection", (socket) => {
         const leavename = sockets[socket.room].names.filter((item) => item['id'] === socket.nickname)
         sockets[socket.room].names = sockets[socket.room].names.filter((item) => item['id'] !== socket.nickname)
         const players = sockets[socket.room].names.filter((item) => item.nickname.length > 0);
-        io.in(socket.room).emit("game_players", players);
         sockets[socket.room].debts = sockets[socket.room].debts.filter((item) => item['id'] !== socket.nickname)
         try {
           sockets[room].currentMembers = io.sockets.adapter.rooms.get(room).size;
         } catch (error) {
-
         }
+
+        if (sockets[room].owner === socket.id) {
+          delete sockets[room];
+          io.in(room).emit("room_closed", room);
+          console.log(`Closed room ${room} user ${name}`);
+        }
+        io.in(socket.room).emit("game_players", players);
         io.in(socket.room).emit("player_names", sockets[socket.room].names);
         io.in(socket.room).emit("player_debts", sockets[socket.room].debts);
         io.in(socket.room).emit("update", `${leavename[0].nickname} has left game`);
-        io.in(socket.room).emit("leave_game", `${socket.nickname} has leaved this game`);
       }
     } catch (error) {
       console.log(error.message);
