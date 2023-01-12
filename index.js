@@ -69,7 +69,7 @@ io.on("connection", (socket) => {
   socket.on("request_join_room", ({ room, name }) => {
     try {
       if (sockets[room]) {
-        io.to(sockets[room].owner).emit("request_join_room", name, socket.id);
+        io.to(sockets[room].owner).emit("request_join_room", name);
       } else {
         io.to(socket.id).emit("response_join_room_fail", "This room has closed.");
       }
@@ -164,6 +164,14 @@ io.on("connection", (socket) => {
         }
       })
       sockets[room].names = [...names]
+      const debts = sockets[room].debts.map((item) => {
+        if (item.id === id) {
+          return { 'id': id, 'debt': 490 }
+        } else {
+          return item
+        }
+      })
+      sockets[room].debts = [...debts]
       io.in(room).emit("player_names", sockets[room].names);
     } catch (err) {
       console.log(err.message);
