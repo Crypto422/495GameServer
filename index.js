@@ -46,6 +46,7 @@ io.on("connection", (socket) => {
           sockets[room].start = false;
           sockets[room].maxMembers = members;
           sockets[room].owner = socket.id;
+          sockets[room].ownername = name;
         }
         sockets[room].names = [...sockets[room].names, { 'id': name, 'nickname': "" }];
         sockets[room].debts = [...sockets[room].debts, { 'id': name, 'debt': 490 }];
@@ -58,8 +59,50 @@ io.on("connection", (socket) => {
         io.in(room).emit("player_names", sockets[room].names);
         io.in(room).emit("player_debts", sockets[room].debts);
         io.in(room).emit("room_state", sockets[room].start);
+        io.in(room).emit("room_owner", sockets[room].ownername);
         socket.broadcast.emit('room_list', sockets);
         console.log(`${name} joind room ${room}`);
+      } catch (err) {
+        console.log(err.message);
+      }
+    }
+  });
+
+  socket.on("create_room", ({ room, name, members }) => {
+    if (!socket.room) {
+      // const leavename = sockets[socket.room].names.filter((item) => item['id'] === socket.nickname)
+      try {
+        if (!sockets[room]) {
+          socket.join(room);
+          socket.nickname = name;
+          socket.room = room;
+          sockets[room] = {};
+          sockets[room].names = [];
+          sockets[room].debts = [];
+          sockets[room].currentMembers = 0;
+          sockets[room].start = false;
+          sockets[room].maxMembers = members;
+          sockets[room].owner = socket.id;
+          sockets[room].ownername = name;
+
+          sockets[room].names = [...sockets[room].names, { 'id': name, 'nickname': "" }];
+          sockets[room].debts = [...sockets[room].debts, { 'id': name, 'debt': 490 }];
+          try {
+            sockets[room].currentMembers = io.sockets.adapter.rooms.get(room).size;
+          } catch (error) {
+
+          }
+          io.to(socket.id).emit("create_room",room, true);
+          io.in(room).emit("max_member", sockets[room].maxMembers);
+          io.in(room).emit("player_names", sockets[room].names);
+          io.in(room).emit("player_debts", sockets[room].debts);
+          io.in(room).emit("room_state", sockets[room].start);
+          io.in(room).emit("room_owner", sockets[room].ownername);
+          socket.broadcast.emit('room_list', sockets);
+          console.log(`${name} created room ${room}`);
+        } else {
+          io.to(socket.id).emit("create_room", room, false);
+        }
       } catch (err) {
         console.log(err.message);
       }
@@ -341,7 +384,7 @@ io.on("connection", (socket) => {
       sockets[room].names = [...names]
       let players = sockets[room].names.filter((item) => item.nickname.length > 0);
       io.in(room).emit("game_players", players);
-      io.in(room).emit("success_game",name, leavename[0].nickname);
+      io.in(room).emit("success_game", name, leavename[0].nickname);
     } catch (error) {
       console.log(error.message);
     }
