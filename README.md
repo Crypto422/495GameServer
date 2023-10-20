@@ -16,7 +16,7 @@
 <h3 align="center">Declare</h3>
 
   <p align="center">
-    A realtime multiplayer card game
+    A realtime multiplayer card game server
     <br />
     <a href="https://declare.ga">View Demo</a>
     ·
